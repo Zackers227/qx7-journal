@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QX7 Gold OPR Killer - Trading Journal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .scrollbar::-webkit-scrollbar-track { background: #1f2937; }
+        .scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen p-4 md:p-8">
+    <header class="mb-8 text-center">
+        <h1 class="text-3xl md:text-4xl font-bold text-yellow-400">QX7 Gold OPR Killer</h1>
+        <p class="text-gray-400">Multi-Account Real-time Monitoring Dashboard</p>
+    </header>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700">
+            <h3 class="text-gray-400 text-xs md:text-sm">Net Profit</h3>
+            <p id="stat-profit" class="text-xl md:text-2xl font-bold text-green-400">$0.00</p>
+        </div>
+        <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700">
+            <h3 class="text-gray-400 text-xs md:text-sm">Win Rate</h3>
+            <p id="stat-winrate" class="text-xl md:text-2xl font-bold text-blue-400">0%</p>
+        </div>
+        <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700">
+            <h3 class="text-gray-400 text-xs md:text-sm">Total Trades</h3>
+            <p id="stat-total" class="text-xl md:text-2xl font-bold text-white">0</p>
+        </div>
+        <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700">
+            <h3 class="text-gray-400 text-xs md:text-sm">Open Positions</h3>
+            <p id="stat-open" class="text-xl md:text-2xl font-bold text-yellow-400">0</p>
+        </div>
+    </div>
+
+    <!-- Charts and OPR -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="lg:col-span-2 bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700">
+            <h3 class="text-lg font-semibold mb-4 text-yellow-400">Equity Curve</h3>
+            <canvas id="equityChart"></canvas>
+        </div>
+        <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700">
+            <h3 class="text-lg font-semibold mb-4 text-yellow-400">Latest OPR Levels</h3>
+            <ul id="opr-list" class="space-y-2 text-sm h-64 overflow-y-auto scrollbar"></ul>
+        </div>
+    </div>
+
+    <!-- Trades Table -->
+    <div class="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700 overflow-x-auto scrollbar">
+        <h3 class="text-lg font-semibold mb-4 text-yellow-400">Trade History</h3>
+        <table class="w-full text-left text-xs md:text-sm">
+            <thead class="bg-gray-700 text-gray-300 uppercase sticky top-0">
+                <tr>
+                    <th class="px-3 py-3">Time</th>
+                    <th class="px-3 py-3">Symbol</th>
+                    <th class="px-3 py-3">Type</th>
+                    <th class="px-3 py-3">Lot</th>
+                    <th class="px-3 py-3">Open</th>
+                    <th class="px-3 py-3">Close</th>
+                    <th class="px-3 py-3">SL / TP</th>
+                    <th class="px-3 py-3">Pips</th>
+                    <th class="px-3 py-3">Profit</th>
+                    <th class="px-3 py-3">Status</th>
+                </tr>
+            </thead>
+            <tbody id="trades-table" class="divide-y divide-gray-700"></tbody>
+        </table>
+    </div>
+
+    <script>
+        async function loadDashboard() {
+            try {
+                const [trades, stats, opr] = await Promise.all([
+                    fetch('/api/trades').then(r => r.json()),
+                    fetch('/api/stats').then(r => r.json()),
+                    fetch('/api/opr').then(r => r.json())
+                ]);
+
+                // Update Stats
+                const totalProfit = stats.totalProfit || 0;
+                document.getElementById('stat-profit').innerText = `$${totalProfit.toFixed(2)}`;
+                document.getElementById('stat-profit').className = `text-xl md:text-2xl font-bold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`;
+                
+                const totalClosed = (stats.wins || 0) + (stats.losses || 0);
+                const winrate = totalClosed > 0 ? ((stats.wins / totalClosed) * 100).toFixed(1) : 0;
+                document.getElementById('stat-winrate').innerText = `${winrate}%`;
+                document.getElementById('stat-total').innerText = totalClosed;
+                
+                const openTrades = trades.filter(t => t.status === 'OPEN');
+                document.getElementById('stat-open').innerText = openTrades.length;
+
+                // Update Table
+                const tbody = document.getElementById('trades-table');
+                tbody.innerHTML = '';
+                trades.forEach(t => {
+                    const profitColor = t.profitLoss > 0 ? 'text-green-400' : (t.profitLoss < 0 ? 'text-red-400' : 'text-gray-300');
+                    const statusBadge = t.status === 'OPEN' 
+                        ? '<span class="px-2 py-1 bg-yellow-500 text-black rounded text-xs font-bold">OPEN</span>' 
+                        : '<span class="px-2 py-1 bg-gray-600 text-white rounded text-xs">CLOSED</span>';
+                    
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-700 transition">
+                            <td class="px-3 py-3 whitespace-nowrap">${new Date(t.openTime).toLocaleString()}</td>
+                            <td class="px-3 py-3 font-bold text-yellow-400">${t.symbol}</td>
+                            <td class="px-3 py-3 font-bold ${t.type === 'BUY' ? 'text-blue-400' : 'text-red-400'}">${t.type}</td>
+                            <td class="px-3 py-3">${t.lotSize}</td>
+                            <td class="px-3 py-3">${t.openPrice}</td>
+                            <td class="px-3 py-3">${t.closePrice || '-'}</td>
+                            <td class="px-3 py-3 text-xs text-gray-400">${t.stopLoss} / ${t.takeProfit}</td>
+                            <td class="px-3 py-3 font-bold ${t.pips > 0 ? 'text-green-400' : 'text-red-400'}">${t.pips ? t.pips.toFixed(1) : '-'}</td>
+                            <td class="px-3 py-3 font-bold ${profitColor}">${t.profitLoss ? '$' + t.profitLoss.toFixed(2) : '-'}</td>
+                            <td class="px-3 py-3">${statusBadge}</td>
+                        </tr>
+                    `;
+                });
+
+                // Update OPR List
+                const oprList = document.getElementById('opr-list');
+                oprList.innerHTML = '';
+                opr.forEach(o => {
+                    oprList.innerHTML += `
+                        <li class="bg-gray-700 p-3 rounded border border-gray-600">
+                            <div class="flex justify-between items-center">
+                                <span class="font-bold text-yellow-400">${o.symbol}</span>
+                                <span class="text-xs text-gray-400">${new Date(o.timestamp).toLocaleDateString()}</span>
+                            </div>
+                            <div class="flex justify-between text-xs mt-2">
+                                <span>H: <span class="text-green-400 font-bold">${o.oprHigh}</span></span>
+                                <span>L: <span class="text-red-400 font-bold">${o.oprLow}</span></span>
+                                <span>ATR: <span class="text-blue-300">${o.atr?.toFixed(2)}</span></span>
+                            </div>
+                        </li>
+                    `;
+                });
+
+                // Update Equity Chart
+                const closedTrades = trades.filter(t => t.status === 'CLOSED').reverse();
+                let cumulativeProfit = 0;
+                const labels = [];
+                const data = [];
+                closedTrades.forEach((t, i) => {
+                    cumulativeProfit += (t.profitLoss || 0);
+                    labels.push(new Date(t.closeTime).toLocaleDateString());
+                    data.push(cumulativeProfit);
+                });
+
+                const ctx = document.getElementById('equityChart').getContext('2d');
+                if(window.myChart) window.myChart.destroy();
+                window.myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Cumulative Profit',
+                            data: data,
+                            borderColor: '#fbbf24',
+                            backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                            fill: true,
+                            tension: 0.4,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#fbbf24'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { grid: { color: '#374151' }, ticks: { color: '#9ca3af' } },
+                            x: { grid: { display: false }, ticks: { color: '#9ca3af' } }
+                        }
+                    }
+                });
+            } catch (err) {
+                console.error("Gagal memuat data:", err);
+            }
+        }
+
+        loadDashboard();
+        setInterval(loadDashboard, 5000); // Auto-refresh setiap 5 detik
+    </script>
+</body>
+</html>
