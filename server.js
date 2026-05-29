@@ -62,6 +62,7 @@ const verifySecret = (req, res, next) => {
         return res.status(401).json({ error: 'Unauthorized: Wrong Webhook Secret' });
     }
     next();
+
 };
 
 // === ENDPOINT WEBHOOK DARI EA MT5 ===
