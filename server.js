@@ -1,3 +1,4 @@
+// Rebuild trigger - 2026-05-30
 const express = require('express');
 const bodyParser = require('body-parser');
 const sqlite3 = require('sqlite3').verbose();
