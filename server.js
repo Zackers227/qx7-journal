@@ -119,6 +119,28 @@ app.get('/api/stats', (req, res) => {
 
 const port = process.env.PORT || 3000;
 
+// === API UNTUK RESET DATABASE ===
+app.get('/api/reset-database', (req, res) => {
+    db.serialize(() => {
+        db.run("DELETE FROM trades", (err) => {
+            if (err) return res.json({ error: err.message });
+            
+            db.run("DELETE FROM opr_levels", (err) => {
+                if (err) return res.json({ error: err.message });
+                
+                // Reset auto-increment ID agar mulai dari 1 lagi
+                db.run("DELETE FROM sqlite_sequence WHERE name='trades'");
+                db.run("DELETE FROM sqlite_sequence WHERE name='opr_levels'");
+                
+                res.json({ 
+                    success: true, 
+                    message: "✅ Database berhasil direset! Data jurnal sudah kosong." 
+                });
+            });
+        });
+    });
+});
+
 app.listen(port, '0.0.0.0', () => {
     console.log(`🚀 Server berjalan di http://localhost:${port}`);
 });
