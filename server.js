@@ -117,6 +117,8 @@ app.get('/api/stats', (req, res) => {
     });
 });
 
-app.listen(PORT, () => {
-    console.log(`🚀 Server berjalan di http://localhost:${PORT}`);
+const port = process.env.PORT || 3000;
+
+app.listen(port, '0.0.0.0', () => {
+    console.log(`🚀 Server berjalan di http://localhost:${port}`);
 });
